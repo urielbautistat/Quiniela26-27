@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 import pytz
-import requests # NUEVA LIBRERÍA PARA INTERNET
+import requests
 
 # --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
 conn = sqlite3.connect('quiniela_nfl.db', check_same_thread=False)
@@ -30,7 +30,6 @@ conn.commit()
 # --- 2. CONFIGURACIÓN DEL CALENDARIO (SOLO FECHAS LÍMITE) ---
 tz_mx = pytz.timezone('America/Mexico_City')
 
-# Ya no escribimos los partidos aquí, solo la fecha límite (Jueves 17:00 CDMX)
 CALENDARIO_LIMITES = {
     1: tz_mx.localize(datetime(2026, 9, 10, 17, 0)),
     2: tz_mx.localize(datetime(2026, 9, 17, 17, 0)),
@@ -54,7 +53,6 @@ CALENDARIO_LIMITES = {
 
 # --- 3. FUNCIONES DE AUTOMATIZACIÓN CON ESPN API ---
 def obtener_partidos_api(jornada):
-    """Se conecta a ESPN y descarga los juegos de la semana solicitada"""
     url = f"http://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=2026&seasontype=2&week={jornada}"
     try:
         respuesta = requests.get(url)
@@ -62,7 +60,6 @@ def obtener_partidos_api(jornada):
         partidos = []
         for evento in datos.get('events', []):
             equipos = evento['competitions'][0]['competitors']
-            # Extraemos los nombres (ej. Packers, Jets)
             eq1 = equipos[0]['team']['name'] 
             eq2 = equipos[1]['team']['name']
             partidos.append(f"{eq1} vs {eq2}")
@@ -71,7 +68,6 @@ def obtener_partidos_api(jornada):
         return []
 
 def actualizar_resultados_api(jornada):
-    """Descarga los ganadores reales desde ESPN y los guarda en la base de datos"""
     url = f"http://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=2026&seasontype=2&week={jornada}"
     try:
         respuesta = requests.get(url).json()
@@ -89,7 +85,7 @@ def actualizar_resultados_api(jornada):
             elif eq2.get('winner') == True:
                 ganador = eq2['team']['name']
             
-            if ganador: # Solo lo registra si el partido ya terminó y hay un ganador
+            if ganador:
                 resultados.append((jornada, nombre_partido, ganador))
                 
         if resultados:
@@ -152,7 +148,6 @@ if menu == "📝 Hacer Picks":
         if usuario and ya_participo(usuario, jornada):
             st.warning(f"Oye {usuario}, ya registraste tus picks para la Jornada {jornada}. ¡Suerte!")
         else:
-            # Magia pura: Descargamos los partidos desde internet
             partidos = obtener_partidos_api(jornada)
             
             if not partidos:
@@ -174,8 +169,34 @@ if menu == "📝 Hacer Picks":
                         else:
                             for partido, pick in predicciones.items():
                                 guardar_prediccion(usuario, jornada, partido, pick)
-                            st.success(f"¡Listo {usuario}! Tus picks fueron registrados.")
+                            
+                            st.success(f"¡Listo {usuario}! Tus picks fueron registrados exitosamente.")
                             st.balloons()
+                            
+                            # --- NUEVA SECCIÓN: COMPROBANTE ---
+                            st.divider()
+                            st.subheader("🧾 Tu Comprobante Oficial")
+                            st.write("Tómale captura de pantalla a esto o descarga tu recibo.")
+                            
+                            df_comprobante = pd.DataFrame(list(predicciones.items()), columns=["Partido", "Tu Elección"])
+                            st.table(df_comprobante)
+                            
+                            fecha_hora = datetime.now(tz_mx).strftime('%d/%m/%Y a las %H:%M:%S')
+                            texto_recibo = f"--- QUINIELA NFL 2026/27 ---\n"
+                            texto_recibo += f"Jugador: {usuario}\n"
+                            texto_recibo += f"Jornada: {jornada}\n"
+                            texto_recibo += f"Registrado el: {fecha_hora} (CDMX)\n"
+                            texto_recibo += f"----------------------------\n\n"
+                            for p, eleccion in predicciones.items():
+                                texto_recibo += f"{p}  👉  {eleccion}\n"
+                            texto_recibo += f"\n¡Mucha suerte!"
+                            
+                            st.download_button(
+                                label="📥 Descargar recibo de picks",
+                                data=texto_recibo,
+                                file_name=f"Quiniela_{usuario}_Jornada{jornada}.txt",
+                                mime="text/plain"
+                            )
 
 elif menu == "🏆 Standings":
     st.header("Tabla de Posiciones")
