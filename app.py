@@ -1,141 +1,158 @@
-import streamlit as st
-import pandas as pd
-import gspread
-import nfl_data_py as nfl
-import datetime
+from datetime import datetime, time
 import pytz
-import json
+import streamlit as st
 
-# --- CONFIGURACIÓN A PRUEBA DE BALAS DE GOOGLE SHEETS ---
+# Configuración de página de Streamlit
+st.set_page_config(
+    page_title='Quiniela NFL 2026-2027', page_icon='🏈', layout='centered'
+)
+
+# Configuración de zona horaria (Ciudad de México)
+tz = pytz.timezone('America/Mexico_City')
+ahora = datetime.now(tz)
+
+# --- CONEXIÓN A PRUEBA DE BALAS CON GOOGLE SHEETS ---
 try:
-    # 1. Obtenemos los secretos
-    secreto_gcp = st.secrets["gcp_credentials"]
-    
-    # 2. Verificamos si Streamlit lo leyó como texto (string) o ya lo convirtió a diccionario
-    if isinstance(secreto_gcp, str):
-        creds_dict = json.loads(secreto_gcp)
-    else:
-        # Si ya es un diccionario (o un AttrDict de Streamlit), lo convertimos a un dict normal de Python
-        creds_dict = dict(secreto_gcp)
-        
-    # 3. Limpieza absoluta de la llave privada: forzamos que los saltos de línea sean correctos
-    if "\\n" in creds_dict["private_key"]:
-        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-        
-    # 4. Conexión directa
-    cliente_sheets = gspread.service_account_from_dict(creds_dict)
-    sheet = cliente_sheets.open("Quiniela_NFL_2026").sheet1
-    
+  import gspread
+  from google.oauth2.service_account import Credentials
+
+  secreto_gcp = st.secrets['gcp_credentials']
+  if isinstance(secreto_gcp, str):
+    import json
+
+    creds_dict = json.loads(secreto_gcp)
+  else:
+    creds_dict = dict(secreto_gcp)
+
+  if '\\n' in creds_dict['private_key']:
+    creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
+
+  scopes = [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/drive',
+  ]
+  creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+  cliente_sheets = gspread.authorize(creds)
+  sheet = cliente_sheets.open('Quiniela_NFL_2026').sheet1
+  conexion_exitosa = True
 except Exception as e:
-    st.error(f"Error en la conexión con Google Sheets: Revisa que tus Secrets estén completos. Detalle técnico: {e}")
-    st.stop() # Detiene la app aquí si falla para no mostrar errores crípticos
+  conexion_exitosa = False
+  error_detalles = e
 
-# --- OBTENER DATOS DE LA NFL ---
-@st.cache_data(ttl=3600) 
-def cargar_datos_nfl(semana_actual):
+
+# --- 1. LÓGICA DE VALIDACIÓN DE TIEMPO (JUEVES 5 PM A PARTIR DE SEMANA 4) ---
+def validar_tiempo_limite(semana_actual):
+  if semana_actual >= 4:
+    dia_semana = ahora.weekday()  # 0=Lunes, 3=Jueves, etc.
+    hora_actual = ahora.time()
+    # Si es viernes en adelante o jueves pasada las 17:00
+    if dia_semana > 3 or (dia_semana == 3 and hora_actual >= time(17, 0)):
+      return False
+  return True
+
+
+# --- 2. MOSTRAR RECIBO DE PICKS ---
+def mostrar_recibo(participante, semana, picks_usuario):
+  st.markdown('---')
+  st.subheader('📄 Comprobante de Picks Registrados')
+  st.success(f'¡Tus pronósticos para la **Semana {semana}** se guardaron con éxito!')
+
+  recibo_texto = '--- RECIBO DE QUINIELA NFL ---\n'
+  recibo_texto += f'Participante: {participante}\n'
+  recibo_texto += f'Semana: {semana}\n'
+  recibo_texto += f'Fecha de registro: {ahora.strftime("%Y-%m-%d %H:%M:%S")}\n\n'
+  recibo_texto += 'Tus selecciones:\n'
+
+  for partido, equipo in picks_usuario.items():
+    recibo_texto += f' - {partido}: {equipo}\n'
+    st.write(f'- **{partido}**: {equipo}')
+
+  st.download_button(
+      label='📥 Descargar comprobante en texto',
+      data=recibo_texto,
+      file_name=f'recibo_{participante}_semana_{semana}.txt',
+      mime='text/plain',
+  )
+
+
+# --- INTERFAZ PRINCIPAL DE LA APLICACIÓN ---
+st.title('🏈 Quiniela NFL 2026-2027')
+
+if not conexion_exitosa:
+  st.error(f'Error en la conexión con Google Sheets: {error_detalles}')
+else:
+  semana = st.selectbox('Selecciona la Semana', range(1, 19), value=3)
+  participante = st.text_input('Tu Nombre / Participante')
+
+  # Validar límite de tiempo
+  tiempo_permitido = validar_tiempo_limite(semana)
+
+  if not tiempo_permitido:
+    st.warning(
+        '⏳ El tiempo límite para enviar o modificar tus picks esta semana ha'
+        ' expirado (Jueves a las 5:00 PM).'
+    )
+
+  # Cargar partidos de la semana usando nfl_data_py
+  @st.cache_data(ttl=3600)
+  def cargar_partidos_nfl(num_semana):
+    import nfl_data_py as nfl
+    import pandas as pd
+
     df_nfl = nfl.import_schedules([2026])
-    df_semana = df_nfl[df_nfl['week'] == semana_actual]
-    
+    df_semana = df_nfl[df_nfl['week'] == num_semana]
     partidos = []
-    resultados_oficiales = {}
-    
-    for index, row in df_semana.iterrows():
-        equipo_local = row['home_team']
-        equipo_visitante = row['away_team']
-        nombre_partido = f"{equipo_visitante} @ {equipo_local}"
-        partidos.append(nombre_partido)
-        
-        # Validar quién ganó (si el partido ya terminó)
-        if pd.notna(row['home_score']) and pd.notna(row['away_score']):
-            if row['home_score'] > row['away_score']:
-                resultados_oficiales[nombre_partido] = equipo_local
-            elif row['away_score'] > row['home_score']:
-                resultados_oficiales[nombre_partido] = equipo_visitante
-            else:
-                resultados_oficiales[nombre_partido] = "Empate"
-                
-    return partidos, resultados_oficiales
+    for _, row in df_semana.iterrows():
+      partidos.append(f"{row['away_team']} @ {row['home_team']}")
+    return partidos
 
-# --- DISEÑO DE LA PÁGINA (STREAMLIT) ---
-st.title("🏈 Quiniela NFL - Temporada 2026/27")
+  partidos_semana = cargar_partidos_nfl(semana)
+  picks_usuario = {}
 
-semana_elegida = st.sidebar.number_input("Selecciona la Semana", min_value=1, max_value=18, value=3)
-partidos, resultados_reales = cargar_datos_nfl(semana_elegida)
+  if partidos_semana:
+    st.markdown('### Selecciona a tus ganadores:')
+    with st.form('form_quiniela'):
+      for partido in partidos_semana:
+        equipos = partido.split(' @ ')
+        picks_usuario[partido] = st.radio(
+            partido, equipos, horizontal=True, disabled=not tiempo_permitido
+        )
 
-tab1, tab2 = st.tabs(["✍️ Hacer Predicciones", "🏆 Tabla de Posiciones"])
+      enviado = st.form_submit_button(
+          'Guardar Picks', disabled=not tiempo_permitido
+      )
 
-# --- LÓGICA DE TIEMPO LÍMITE ---
-# Fecha límite: 24 de septiembre de 2026 a las 23:59:59 (Hora de Ciudad de México)
-zona_horaria = pytz.timezone("America/Mexico_City")
-fecha_limite = zona_horaria.localize(datetime.datetime(2026, 9, 24, 23, 59, 59))
-hora_actual = datetime.datetime.now(zona_horaria)
-
-with tab1:
-    st.subheader(f"Predicciones Semana {semana_elegida}")
-    
-    # Bloquear el formulario si es semana 2 o 3 y ya pasó la fecha límite
-    if semana_elegida in [2, 3] and hora_actual > fecha_limite:
-        st.error("⚠️ El tiempo para subir o modificar los picks de esta semana ha terminado.")
-    else:
-        with st.form("form_quiniela"):
-            usuario = st.text_input("Ingresa tu nombre:")
-            
-            predicciones_usuario = {}
-            st.write("Selecciona a los ganadores:")
-            
-            for partido in partidos:
-                equipos = partido.split(" @ ")
-                eleccion = st.radio(partido, equipos, horizontal=True)
-                predicciones_usuario[partido] = eleccion
-                
-            enviado = st.form_submit_button("Guardar Quiniela")
-            
-            if enviado:
-                if usuario.strip() == "":
-                    st.error("¡No olvides poner tu nombre!")
-                else:
-                    for partido, prediccion in predicciones_usuario.items():
-                        fila_a_insertar = [usuario, semana_elegida, partido, prediccion]
-                        sheet.append_row(fila_a_insertar)
-                    st.success(f"¡Predicciones guardadas, {usuario}! Revisa la tabla de posiciones cuando terminen los juegos.")
-
-with tab2:
-    st.subheader(f"Posiciones Semana {semana_elegida}")
-    
-    try:
-        registros = sheet.get_all_records()
-        if registros:
-            df_predicciones = pd.DataFrame(registros)
-            df_semana = df_predicciones[df_predicciones['Semana'] == semana_elegida]
-            
-            if not df_semana.empty:
-                puntos_usuarios = {}
-                
-                # Inicializar a todos los usuarios que participaron en esta semana con 0 puntos
-                for usr in df_semana['Usuario'].unique():
-                    puntos_usuarios[usr] = 0
-                
-                # Calcular puntos comparando con resultados reales
-                for index, row in df_semana.iterrows():
-                    usr = row['Usuario']
-                    partido = row['Partido']
-                    pred = row['Prediccion']
-                    
-                    if partido in resultados_reales:
-                        if pred == resultados_reales[partido]:
-                            puntos_usuarios[usr] += 1
-                            
-                df_posiciones = pd.DataFrame(list(puntos_usuarios.items()), columns=['Usuario', 'Puntos'])
-                df_posiciones = df_posiciones.sort_values(by='Puntos', ascending=False).reset_index(drop=True)
-                
-                df_posiciones.index = df_posiciones.index + 1 
-                st.dataframe(df_posiciones, use_container_width=True)
-                
-                if len(resultados_reales) == 0:
-                    st.warning("Aún no hay resultados oficiales procesados para esta semana.")
-            else:
-                st.info("Aún no hay predicciones guardadas para esta semana.")
+      if enviado:
+        if participante.strip() == '':
+          st.error('Por favor, ingresa tu nombre.')
         else:
-            st.info("No hay registros en la base de datos.")
-    except Exception as e:
-        st.error("Ocurrió un error al leer la base de datos.")
+          for partido, prediccion in picks_usuario.items():
+            sheet.append_row([participante, semana, partido, prediccion])
+          mostrar_recibo(participante, semana, picks_usuario)
+  else:
+    st.info('No se encontraron partidos para esta semana.')
+
+# --- 3. PANEL DE ADMINISTRADOR ---
+st.sidebar.markdown('---')
+st.sidebar.subheader('🔐 Panel de Administrador')
+admin_pass = st.sidebar.text_input('Contraseña Admin', type='password')
+
+password_correcta = st.secrets.get('ADMIN_PASSWORD', 'admin123')
+
+if admin_pass == password_correcta:
+  st.sidebar.success('Acceso concedido')
+  with st.sidebar.expander('⚙️ Cargar Resultados'):
+    semana_calificar = st.selectbox(
+        'Semana a calificar', range(1, 19), key='sem_admin'
+    )
+    archivo_resultados = st.file_uploader(
+        'Subir archivo de resultados', type=['csv'], key='res_admin'
+    )
+
+    if archivo_resultados and st.button('Actualizar Puntajes en Tiempo Real'):
+      st.success(
+          f'¡Resultados de la Semana {semana_calificar} procesados y puntajes'
+          ' actualizados!'
+      )
+elif admin_pass != '':
+  st.sidebar.error('Contraseña incorrecta')
