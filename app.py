@@ -81,7 +81,8 @@ st.title('🏈 Quiniela NFL 2026-2027')
 if not conexion_exitosa:
   st.error(f'Error en la conexión con Google Sheets: {error_detalles}')
 else:
-  semana = st.selectbox('Selecciona la Semana', range(1, 19), value=3)
+  # CORRECCIÓN AQUÍ: Se envuelve el range en list()
+  semana = st.selectbox('Selecciona la Semana', list(range(1, 19)), index=2)
   participante = st.text_input('Tu Nombre / Participante')
 
   # Validar límite de tiempo
@@ -142,8 +143,9 @@ password_correcta = st.secrets.get('ADMIN_PASSWORD', 'admin123')
 if admin_pass == password_correcta:
   st.sidebar.success('Acceso concedido')
   with st.sidebar.expander('⚙️ Cargar Resultados'):
+    # CORRECCIÓN AQUÍ TAMBIÉN: list(range(...))
     semana_calificar = st.selectbox(
-        'Semana a calificar', range(1, 19), key='sem_admin'
+        'Semana a calificar', list(range(1, 19)), key='sem_admin'
     )
     archivo_resultados = st.file_uploader(
         'Subir archivo de resultados', type=['csv'], key='res_admin'
