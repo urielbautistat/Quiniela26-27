@@ -1,28 +1,24 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import nfl_data_py as nfl
 import datetime
 import pytz
 import json
 
 # --- CONFIGURACIÓN DE GOOGLE SHEETS (SECRETS) ---
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-
 # Carga las credenciales de forma segura desde los Secrets de Streamlit
 creds_dict = json.loads(st.secrets["gcp_credentials"])
 
-# --- LA LÍNEA MÁGICA QUE SOLUCIONA EL ERROR BINASCII ---
-# Asegura que los saltos de línea de la llave privada se interpreten correctamente
+# Asegura que los saltos de línea tengan el formato exacto que pide Google
 creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-cliente_sheets = gspread.authorize(creds)
+# Autenticación directa y moderna (sin oauth2client)
+cliente_sheets = gspread.service_account_from_dict(creds_dict)
 sheet = cliente_sheets.open("Quiniela_NFL_2026").sheet1
 
 # --- OBTENER DATOS DE LA NFL ---
-@st.cache_data(ttl=3600) # Se actualiza cada hora para no saturar la API
+@st.cache_data(ttl=3600) 
 def cargar_datos_nfl(semana_actual):
     df_nfl = nfl.import_schedules([2026])
     df_semana = df_nfl[df_nfl['week'] == semana_actual]
