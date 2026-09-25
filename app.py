@@ -5,10 +5,14 @@ from oauth2client.service_account import ServiceAccountCredentials
 import nfl_data_py as nfl
 import datetime
 import pytz
+import json
 
 # --- CONFIGURACIÓN DE GOOGLE SHEETS ---
+# Usar st.secrets para leer las credenciales desde la configuración de Streamlit Cloud
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+creds_dict = json.loads(st.secrets["gcp_credentials"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+
 cliente_sheets = gspread.authorize(creds)
 sheet = cliente_sheets.open("Quiniela_NFL_2026").sheet1
 
@@ -27,6 +31,7 @@ def cargar_datos_nfl(semana_actual):
         nombre_partido = f"{equipo_visitante} @ {equipo_local}"
         partidos.append(nombre_partido)
         
+        # Validar quién ganó (si el partido ya terminó)
         if pd.notna(row['home_score']) and pd.notna(row['away_score']):
             if row['home_score'] > row['away_score']:
                 resultados_oficiales[nombre_partido] = equipo_local
