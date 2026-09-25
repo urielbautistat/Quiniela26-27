@@ -1,6 +1,5 @@
 streamlit
 gspread
 google-auth
-nfl-data-py
 pandas
 pytz
