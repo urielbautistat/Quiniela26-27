@@ -9,10 +9,14 @@ import json
 # --- CONFIGURACIÓN DE GOOGLE SHEETS (SECRETS) ---
 import json
 
-# Carga las credenciales de forma segura desde los Secrets de Streamlit
+# --- CONFIGURACIÓN DE GOOGLE SHEETS (SECRETS) ---
+# 1. Carga el texto de las credenciales desde los secrets
 creds_dict = json.loads(st.secrets["gcp_credentials"])
 
-# Autenticación directa y moderna (sin necesidad de reemplazar caracteres)
+# 2. LÍNEA CRÍTICA: Fuerza la conversión de los saltos de línea para que la librería pueda leer la llave
+creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+
+# 3. Autenticación directa con el diccionario ya limpio
 cliente_sheets = gspread.service_account_from_dict(creds_dict)
 sheet = cliente_sheets.open("Quiniela_NFL_2026").sheet1
 # --- OBTENER DATOS DE LA NFL ---
