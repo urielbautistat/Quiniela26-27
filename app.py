@@ -12,8 +12,12 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 
 # Carga las credenciales de forma segura desde los Secrets de Streamlit
 creds_dict = json.loads(st.secrets["gcp_credentials"])
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 
+# --- LA LÍNEA MÁGICA QUE SOLUCIONA EL ERROR BINASCII ---
+# Asegura que los saltos de línea de la llave privada se interpreten correctamente
+creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 cliente_sheets = gspread.authorize(creds)
 sheet = cliente_sheets.open("Quiniela_NFL_2026").sheet1
 
