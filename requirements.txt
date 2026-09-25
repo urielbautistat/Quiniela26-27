@@ -1,5 +1,6 @@
 streamlit
-pandas
 gspread
-nfl_data_py
+google-auth
+nfl-data-py
+pandas
 pytz
