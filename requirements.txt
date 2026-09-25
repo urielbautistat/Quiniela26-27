@@ -1,6 +1,5 @@
 streamlit
 pandas
 gspread
-oauth2client
 nfl_data_py
 pytz
