@@ -44,7 +44,6 @@ except Exception as e:
 def validar_tiempo_limite(semana_actual):
   # Semanas 1, 2 y 3: Límite mañana viernes a las 12:00 PM
   if semana_actual <= 3:
-    # Fecha límite fija: Mañana viernes a las 12:00 PM (2026-09-25 12:00:00)
     limite_semanas_1_3 = tz.localize(datetime(2026, 9, 25, 12, 0, 0))
     if ahora > limite_semanas_1_3:
       return False
@@ -63,7 +62,6 @@ def usuario_ya_participo(participante, semana):
   try:
     registros = sheet.get_all_records()
     for row in registros:
-      # Comparamos ignorando mayúsculas/minúsculas en el nombre y el número de semana
       if (
           str(row.get('Participante', '')).strip().lower()
           == participante.strip().lower()
@@ -121,7 +119,6 @@ else:
     )
     participante = st.text_input('Tu Nombre / Participante').strip()
 
-    # Validaciones de tiempo y de envío único
     tiempo_permitido = validar_tiempo_limite(semana)
 
     if not tiempo_permitido:
@@ -136,7 +133,6 @@ else:
             ' (Jueves a las 5:00 PM).'
         )
 
-    # Validar si ya registró picks en esta semana (solo si ingresó nombre)
     ya_envio = False
     if participante:
       ya_envio = usuario_ya_participo(participante, semana)
@@ -147,60 +143,61 @@ else:
             ' por semana.'
         )
 
-    # Catálogo de partidos
+    # Catálogo de partidos oficiales y reales
     partidos_por_semana = {
         1: [
-            'Kansas City Chiefs vs Baltimore Ravens',
-            'Philadelphia Eagles vs Green Bay Packers',
-            'Buffalo Bills vs Arizona Cardinals',
-            'Chicago Bears vs Tennessee Titans',
-            'Cincinnati Bengals vs New England Patriots',
-            'Detroit Lions vs Los Angeles Rams',
-            'Miami Dolphins vs Jacksonville Jaguars',
-            'New Orleans Saints vs Carolina Panthers',
-            'New York Giants vs Minnesota Vikings',
+            'New England Patriots vs Seattle Seahawks',
+            'San Francisco 49ers vs Los Angeles Rams',
+            'Chicago Bears vs Carolina Panthers',
+            'Tampa Bay Buccaneers vs Cincinnati Bengals',
+            'New Orleans Saints vs Detroit Lions',
+            'Buffalo Bills vs Houston Texans',
+            'Baltimore Ravens vs Indianapolis Colts',
+            'Cleveland Browns vs Jacksonville Jaguars',
             'Atlanta Falcons vs Pittsburgh Steelers',
-            'Indianapolis Colts vs Houston Texans',
-            'Seattle Seahawks vs Denver Broncos',
-            'Los Angeles Chargers vs Las Vegas Raiders',
-            'Tampa Bay Buccaneers vs Washington Commanders',
-            'Cleveland Browns vs Dallas Cowboys',
-            'San Francisco 49ers vs New York Jets',
+            'New Jets vs Tennessee Titans',
+            'Arizona Cardinals vs Los Angeles Chargers',
+            'Miami Dolphins vs Las Vegas Raiders',
+            'Green Bay Packers vs Minnesota Vikings',
+            'Washington Commanders vs Philadelphia Eagles',
+            'Dallas Cowboys vs New York Giants',
+            'Denver Broncos vs Kansas City Chiefs',
         ],
         2: [
-            'Miami Dolphins vs Buffalo Bills',
-            'Baltimore Ravens vs Las Vegas Raiders',
-            'Dallas Cowboys vs New Orleans Saints',
-            'Detroit Lions vs Tampa Bay Buccaneers',
-            'Green Bay Packers vs Indianapolis Colts',
-            'Houston Texans vs Chicago Bears',
-            'Jacksonville Jaguars vs Cleveland Browns',
-            'Minnesota Vikings vs San Francisco 49ers',
-            'New England Patriots vs Seattle Seahawks',
-            'New York Giants vs Washington Commanders',
-            'Los Angeles Chargers vs Carolina Panthers',
-            'Los Angeles Rams vs Arizona Cardinals',
-            'Denver Broncos vs Pittsburgh Steelers',
-            'Philadelphia Eagles vs Atlanta Falcons',
-            'Kansas City Chiefs vs Cincinnati Bengals',
-            'San Francisco 49ers vs New York Jets',
+            'Buffalo Bills vs Detroit Lions',
+            'Cincinnati Bengals vs Houston Texans',
+            'New York Jets vs Green Bay Packers',
+            'Baltimore Ravens vs New Orleans Saints',
+            'Tennessee Titans vs Philadelphia Eagles',
+            'Chicago Bears vs Minnesota Vikings',
+            'Tampa Bay Buccaneers vs Cleveland Browns',
+            'New England Patriots vs Pittsburgh Steelers',
+            'Atlanta Falcons vs Carolina Panthers',
+            'Los Angeles Chargers vs Las Vegas Raiders',
+            'Denver Broncos vs Jacksonville Jaguars',
+            'Dallas Cowboys vs Washington Commanders',
+            'San Francisco 49ers vs Miami Dolphins',
+            'Arizona Cardinals vs Seattle Seahawks',
+            'Kansas City Chiefs vs Indianapolis Colts',
+            'New York Giants vs Los Angeles Rams',
         ],
         3: [
-            'New York Giants vs Cleveland Browns',
-            'Green Bay Packers vs Tennessee Titans',
-            'Chicago Bears vs Indianapolis Colts',
-            'Houston Texans vs Minnesota Vikings',
-            'Las Vegas Raiders vs Carolina Panthers',
-            'New Orleans Saints vs Philadelphia Eagles',
-            'Tampa Bay Buccaneers vs Denver Broncos',
-            'Los Angeles Chargers vs Pittsburgh Steelers',
-            'Atlanta Falcons vs Kansas City Chiefs',
-            'Seattle Seahawks vs Miami Dolphins',
-            'Arizona Cardinals vs Detroit Lions',
-            'Los Angeles Rams vs San Francisco 49ers',
+            'Pittsburgh Steelers vs Cincinnati Bengals',
+            'Jacksonville Jaguars vs New England Patriots',
+            'New York Giants vs Tennessee Titans',
+            'Washington Commanders vs Seattle Seahawks',
+            'Detroit Lions vs New York Jets',
+            'Cleveland Browns vs Carolina Panthers',
+            'Miami Dolphins vs Kansas City Chiefs',
+            'Buffalo Bills vs Los Angeles Chargers',
+            'Indianapolis Colts vs Houston Texans',
+            'San Francisco 49ers vs Arizona Cardinals',
+            'Tampa Bay Buccaneers vs Minnesota Vikings',
+            'New Orleans Saints vs Las Vegas Raiders',
             'Dallas Cowboys vs Baltimore Ravens',
-            'Buffalo Bills vs Jacksonville Jaguars',
-            'Cincinnati Bengals vs Washington Commanders',
+            'Denver Broncos vs Los Angeles Rams',
+            'Chicago Bears vs Philadelphia Eagles',
+            'Green Bay Packers vs Atlanta Falcons',
         ],
         4: [
             'Dallas Cowboys vs New York Giants',
@@ -232,7 +229,6 @@ else:
     picks_usuario = {}
     st.markdown('### Selecciona a tus ganadores:')
 
-    # El formulario se deshabilita si ya pasó el tiempo o si el usuario ya envió su quiniela
     formulario_bloqueado = not tiempo_permitido or ya_envio or not participante
 
     with st.form('form_quiniela'):
@@ -250,14 +246,12 @@ else:
         if participante == '':
           st.error('Por favor, ingresa tu nombre.')
         else:
-          # Doble validación al momento de dar clic
           if usuario_ya_participo(participante, semana):
             st.error(
                 'Ya habías registrado tus picks para esta semana previamente.'
             )
           else:
             for partido, prediccion in picks_usuario.items():
-              # Guardamos en Google Sheets: [Participante, Semana, Partido, Prediccion]
               sheet.append_row([participante, semana, partido, prediccion])
             mostrar_recibo(participante, semana, picks_usuario)
 
