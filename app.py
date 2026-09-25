@@ -7,9 +7,10 @@ import datetime
 import pytz
 import json
 
-# --- CONFIGURACIÓN DE GOOGLE SHEETS ---
-# Usar st.secrets para leer las credenciales desde la configuración de Streamlit Cloud
+# --- CONFIGURACIÓN DE GOOGLE SHEETS (SECRETS) ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+# Carga las credenciales de forma segura desde los Secrets de Streamlit
 creds_dict = json.loads(st.secrets["gcp_credentials"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 
@@ -17,7 +18,7 @@ cliente_sheets = gspread.authorize(creds)
 sheet = cliente_sheets.open("Quiniela_NFL_2026").sheet1
 
 # --- OBTENER DATOS DE LA NFL ---
-@st.cache_data 
+@st.cache_data(ttl=3600) # Se actualiza cada hora para no saturar la API
 def cargar_datos_nfl(semana_actual):
     df_nfl = nfl.import_schedules([2026])
     df_semana = df_nfl[df_nfl['week'] == semana_actual]
@@ -51,7 +52,7 @@ partidos, resultados_reales = cargar_datos_nfl(semana_elegida)
 tab1, tab2 = st.tabs(["✍️ Hacer Predicciones", "🏆 Tabla de Posiciones"])
 
 # --- LÓGICA DE TIEMPO LÍMITE ---
-# Definir la fecha límite: 24 de septiembre de 2026 a las 23:59:59 (Hora CDMX)
+# Fecha límite: 24 de septiembre de 2026 a las 23:59:59 (Hora de Ciudad de México)
 zona_horaria = pytz.timezone("America/Mexico_City")
 fecha_limite = zona_horaria.localize(datetime.datetime(2026, 9, 24, 23, 59, 59))
 hora_actual = datetime.datetime.now(zona_horaria)
@@ -59,12 +60,12 @@ hora_actual = datetime.datetime.now(zona_horaria)
 with tab1:
     st.subheader(f"Predicciones Semana {semana_elegida}")
     
-    # Bloquear el formulario si es semana 2 o 3 y ya pasó la medianoche
+    # Bloquear el formulario si es semana 2 o 3 y ya pasó la fecha límite
     if semana_elegida in [2, 3] and hora_actual > fecha_limite:
         st.error("⚠️ El tiempo para subir o modificar los picks de esta semana ha terminado.")
     else:
         with st.form("form_quiniela"):
-            usuario = st.text_input("Ingresa tu nombre (Ej. Uriel):")
+            usuario = st.text_input("Ingresa tu nombre:")
             
             predicciones_usuario = {}
             st.write("Selecciona a los ganadores:")
@@ -113,7 +114,6 @@ with tab2:
             df_posiciones = pd.DataFrame(list(puntos_usuarios.items()), columns=['Usuario', 'Puntos'])
             df_posiciones = df_posiciones.sort_values(by='Puntos', ascending=False).reset_index(drop=True)
             
-            # Ajustar la visualización de la tabla para que empiece en el número 1
             df_posiciones.index = df_posiciones.index + 1 
             st.dataframe(df_posiciones, use_container_width=True)
             
