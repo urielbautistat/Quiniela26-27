@@ -6,19 +6,30 @@ import datetime
 import pytz
 import json
 
-# --- CONFIGURACIÓN DE GOOGLE SHEETS (SECRETS) ---
-import json
+# --- CONFIGURACIÓN A PRUEBA DE BALAS DE GOOGLE SHEETS ---
+try:
+    # 1. Obtenemos los secretos
+    secreto_gcp = st.secrets["gcp_credentials"]
+    
+    # 2. Verificamos si Streamlit lo leyó como texto (string) o ya lo convirtió a diccionario
+    if isinstance(secreto_gcp, str):
+        creds_dict = json.loads(secreto_gcp)
+    else:
+        # Si ya es un diccionario (o un AttrDict de Streamlit), lo convertimos a un dict normal de Python
+        creds_dict = dict(secreto_gcp)
+        
+    # 3. Limpieza absoluta de la llave privada: forzamos que los saltos de línea sean correctos
+    if "\\n" in creds_dict["private_key"]:
+        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        
+    # 4. Conexión directa
+    cliente_sheets = gspread.service_account_from_dict(creds_dict)
+    sheet = cliente_sheets.open("Quiniela_NFL_2026").sheet1
+    
+except Exception as e:
+    st.error(f"Error en la conexión con Google Sheets: Revisa que tus Secrets estén completos. Detalle técnico: {e}")
+    st.stop() # Detiene la app aquí si falla para no mostrar errores crípticos
 
-# --- CONFIGURACIÓN DE GOOGLE SHEETS (SECRETS) ---
-# 1. Carga el texto de las credenciales desde los secrets
-creds_dict = json.loads(st.secrets["gcp_credentials"])
-
-# 2. LÍNEA CRÍTICA: Fuerza la conversión de los saltos de línea para que la librería pueda leer la llave
-creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-
-# 3. Autenticación directa con el diccionario ya limpio
-cliente_sheets = gspread.service_account_from_dict(creds_dict)
-sheet = cliente_sheets.open("Quiniela_NFL_2026").sheet1
 # --- OBTENER DATOS DE LA NFL ---
 @st.cache_data(ttl=3600) 
 def cargar_datos_nfl(semana_actual):
@@ -80,7 +91,7 @@ with tab1:
             enviado = st.form_submit_button("Guardar Quiniela")
             
             if enviado:
-                if usuario == "":
+                if usuario.strip() == "":
                     st.error("¡No olvides poner tu nombre!")
                 else:
                     for partido, prediccion in predicciones_usuario.items():
@@ -91,37 +102,40 @@ with tab1:
 with tab2:
     st.subheader(f"Posiciones Semana {semana_elegida}")
     
-    registros = sheet.get_all_records()
-    if registros:
-        df_predicciones = pd.DataFrame(registros)
-        df_semana = df_predicciones[df_predicciones['Semana'] == semana_elegida]
-        
-        if not df_semana.empty:
-            puntos_usuarios = {}
+    try:
+        registros = sheet.get_all_records()
+        if registros:
+            df_predicciones = pd.DataFrame(registros)
+            df_semana = df_predicciones[df_predicciones['Semana'] == semana_elegida]
             
-            # Inicializar a todos los usuarios que participaron en esta semana con 0 puntos
-            for usr in df_semana['Usuario'].unique():
-                puntos_usuarios[usr] = 0
-            
-            # Calcular puntos comparando con resultados reales
-            for index, row in df_semana.iterrows():
-                usr = row['Usuario']
-                partido = row['Partido']
-                pred = row['Prediccion']
+            if not df_semana.empty:
+                puntos_usuarios = {}
                 
-                if partido in resultados_reales:
-                    if pred == resultados_reales[partido]:
-                        puntos_usuarios[usr] += 1
-                        
-            df_posiciones = pd.DataFrame(list(puntos_usuarios.items()), columns=['Usuario', 'Puntos'])
-            df_posiciones = df_posiciones.sort_values(by='Puntos', ascending=False).reset_index(drop=True)
-            
-            df_posiciones.index = df_posiciones.index + 1 
-            st.dataframe(df_posiciones, use_container_width=True)
-            
-            if len(resultados_reales) == 0:
-                st.warning("Aún no hay resultados oficiales procesados para esta semana.")
+                # Inicializar a todos los usuarios que participaron en esta semana con 0 puntos
+                for usr in df_semana['Usuario'].unique():
+                    puntos_usuarios[usr] = 0
+                
+                # Calcular puntos comparando con resultados reales
+                for index, row in df_semana.iterrows():
+                    usr = row['Usuario']
+                    partido = row['Partido']
+                    pred = row['Prediccion']
+                    
+                    if partido in resultados_reales:
+                        if pred == resultados_reales[partido]:
+                            puntos_usuarios[usr] += 1
+                            
+                df_posiciones = pd.DataFrame(list(puntos_usuarios.items()), columns=['Usuario', 'Puntos'])
+                df_posiciones = df_posiciones.sort_values(by='Puntos', ascending=False).reset_index(drop=True)
+                
+                df_posiciones.index = df_posiciones.index + 1 
+                st.dataframe(df_posiciones, use_container_width=True)
+                
+                if len(resultados_reales) == 0:
+                    st.warning("Aún no hay resultados oficiales procesados para esta semana.")
+            else:
+                st.info("Aún no hay predicciones guardadas para esta semana.")
         else:
-            st.info("Aún no hay predicciones guardadas para esta semana.")
-    else:
-        st.info("No hay registros en la base de datos.")
+            st.info("No hay registros en la base de datos.")
+    except Exception as e:
+        st.error("Ocurrió un error al leer la base de datos.")
