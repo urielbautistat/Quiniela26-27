@@ -81,8 +81,12 @@ st.title('🏈 Quiniela NFL 2026-2027')
 if not conexion_exitosa:
   st.error(f'Error en la conexión con Google Sheets: {error_detalles}')
 else:
-  # CORRECCIÓN AQUÍ: Se envuelve el range en list()
-  semana = st.selectbox('Selecciona la Semana', list(range(1, 19)), index=2)
+  # Lista explícita para evitar errores de tipo en st.selectbox
+  semana = st.selectbox(
+      'Selecciona la Semana',
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+      index=2,
+  )
   participante = st.text_input('Tu Nombre / Participante')
 
   # Validar límite de tiempo
@@ -93,6 +97,7 @@ else:
         '⏳ El tiempo límite para enviar o modificar tus picks esta semana ha'
         ' expirado (Jueves a las 5:00 PM).'
     )
+
 
   # Cargar partidos de la semana usando nfl_data_py
   @st.cache_data(ttl=3600)
@@ -106,6 +111,7 @@ else:
     for _, row in df_semana.iterrows():
       partidos.append(f"{row['away_team']} @ {row['home_team']}")
     return partidos
+
 
   partidos_semana = cargar_partidos_nfl(semana)
   picks_usuario = {}
@@ -143,9 +149,10 @@ password_correcta = st.secrets.get('ADMIN_PASSWORD', 'admin123')
 if admin_pass == password_correcta:
   st.sidebar.success('Acceso concedido')
   with st.sidebar.expander('⚙️ Cargar Resultados'):
-    # CORRECCIÓN AQUÍ TAMBIÉN: list(range(...))
     semana_calificar = st.selectbox(
-        'Semana a calificar', list(range(1, 19)), key='sem_admin'
+        'Semana a calificar',
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+        key='sem_admin',
     )
     archivo_resultados = st.file_uploader(
         'Subir archivo de resultados', type=['csv'], key='res_admin'
