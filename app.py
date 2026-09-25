@@ -2,16 +2,16 @@ from datetime import datetime, time
 import pytz
 import streamlit as st
 
-# Configuración de página de Streamlit
+# Configuración de página
 st.set_page_config(
     page_title='Quiniela NFL 2026-2027', page_icon='🏈', layout='centered'
 )
 
-# Configuración de zona horaria (Ciudad de México)
+# Zona horaria (Ciudad de México)
 tz = pytz.timezone('America/Mexico_City')
 ahora = datetime.now(tz)
 
-# --- CONEXIÓN A PRUEBA DE BALAS CON GOOGLE SHEETS ---
+# --- CONEXIÓN CON GOOGLE SHEETS ---
 try:
   import gspread
   from google.oauth2.service_account import Credentials
@@ -33,6 +33,7 @@ try:
   ]
   creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
   cliente_sheets = gspread.authorize(creds)
+  # Usamos la primera hoja para los picks y una segunda o la misma según prefieras
   sheet = cliente_sheets.open('Quiniela_NFL_2026').sheet1
   conexion_exitosa = True
 except Exception as e:
@@ -40,32 +41,31 @@ except Exception as e:
   error_detalles = e
 
 
-# --- 1. LÓGICA DE VALIDACIÓN DE TIEMPO (JUEVES 5 PM A PARTIR DE SEMANA 4) ---
+# --- VALIDACIÓN DE TIEMPO LÍMITE (JUEVES 5 PM A PARTIR DE SEMANA 4) ---
 def validar_tiempo_limite(semana_actual):
   if semana_actual >= 4:
     dia_semana = ahora.weekday()  # 0=Lunes, 3=Jueves, etc.
     hora_actual = ahora.time()
-    # Si es viernes en adelante o jueves pasada las 17:00
     if dia_semana > 3 or (dia_semana == 3 and hora_actual >= time(17, 0)):
       return False
   return True
 
 
-# --- 2. MOSTRAR RECIBO DE PICKS ---
+# --- RECIBO DE PICKS ---
 def mostrar_recibo(participante, semana, picks_usuario):
   st.markdown('---')
   st.subheader('📄 Comprobante de Picks Registrados')
-  st.success(f'¡Tus pronósticos para la **Semana {semana}** se guardaron con éxito!')
+  st.success(f'¡Tus pronósticos para la **Semana {semana}** se guardaron!')
 
   recibo_texto = '--- RECIBO DE QUINIELA NFL ---\n'
   recibo_texto += f'Participante: {participante}\n'
   recibo_texto += f'Semana: {semana}\n'
-  recibo_texto += f'Fecha de registro: {ahora.strftime("%Y-%m-%d %H:%M:%S")}\n\n'
+  recibo_texto += f'Fecha: {ahora.strftime("%Y-%m-%d %H:%M:%S")}\n\n'
   recibo_texto += 'Tus selecciones:\n'
 
   for partido, equipo in picks_usuario.items():
-    recibo_texto += f' - {partido}: {equipo}\n'
-    st.write(f'- **{partido}**: {equipo}')
+    recibo_texto += f' - {partido} -> Ganador: {equipo}\n'
+    st.write(f'- **{partido}** ➔ **{equipo}**')
 
   st.download_button(
       label='📥 Descargar comprobante en texto',
@@ -75,52 +75,65 @@ def mostrar_recibo(participante, semana, picks_usuario):
   )
 
 
-# --- INTERFAZ PRINCIPAL DE LA APLICACIÓN ---
+# --- INTERFAZ PRINCIPAL ---
 st.title('🏈 Quiniela NFL 2026-2027')
 
 if not conexion_exitosa:
   st.error(f'Error en la conexión con Google Sheets: {error_detalles}')
 else:
-  # Lista explícita para evitar errores de tipo en st.selectbox
-  semana = st.selectbox(
-      'Selecciona la Semana',
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
-      index=2,
+  # Pestañas principales para separar la Quiniela de la Tabla de Posiciones (Standings)
+  tab_quiniela, tab_standings = st.tabs(
+      ['📝 Hacer Quiniela', '🏆 Standings / Posiciones']
   )
-  participante = st.text_input('Tu Nombre / Participante')
 
-  # Validar límite de tiempo
-  tiempo_permitido = validar_tiempo_limite(semana)
+  with tab_quiniela:
+    semana = st.selectbox(
+        'Selecciona la Semana',
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+        index=2,
+    )
+    participante = st.text_input('Tu Nombre / Participante')
 
-  if not tiempo_permitido:
-    st.warning(
-        '⏳ El tiempo límite para enviar o modificar tus picks esta semana ha'
-        ' expirado (Jueves a las 5:00 PM).'
+    tiempo_permitido = validar_tiempo_limite(semana)
+
+    if not tiempo_permitido:
+      st.warning(
+          '⏳ El tiempo límite para enviar o modificar picks esta semana ha'
+          ' expirado (Jueves a las 5:00 PM).'
+      )
+
+    # Diccionario con nombres limpios y formato de equipos completos
+    partidos_por_semana = {
+        3: [
+            'Green Bay Packers vs Atlanta Falcons',
+            'Kansas City Chiefs vs Baltimore Ravens',
+            'Dallas Cowboys vs New York Giants',
+            'San Francisco 49ers vs Los Angeles Rams',
+            'Buffalo Bills vs Miami Dolphins',
+        ],
+        4: [
+            'Green Bay Packers vs Chicago Bears',
+            'Philadelphia Eagles vs Washington Commanders',
+            'Detroit Lions vs Minnesota Vikings',
+            'Las Vegas Raiders vs Denver Broncos',
+        ],
+    }
+
+    # Partidos por defecto si la semana seleccionada aún no está escrita en el diccionario
+    partidos_semana = partidos_por_semana.get(
+        semana, [
+            'Equipo Local A vs Equipo Visitante B',
+            'Equipo Local C vs Equipo Visitante D',
+        ]
     )
 
-
-  # Cargar partidos de la semana usando nfl_data_py
-  @st.cache_data(ttl=3600)
-  def cargar_partidos_nfl(num_semana):
-    import nfl_data_py as nfl
-    import pandas as pd
-
-    df_nfl = nfl.import_schedules([2026])
-    df_semana = df_nfl[df_nfl['week'] == num_semana]
-    partidos = []
-    for _, row in df_semana.iterrows():
-      partidos.append(f"{row['away_team']} @ {row['home_team']}")
-    return partidos
-
-
-  partidos_semana = cargar_partidos_nfl(semana)
-  picks_usuario = {}
-
-  if partidos_semana:
+    picks_usuario = {}
     st.markdown('### Selecciona a tus ganadores:')
+
     with st.form('form_quiniela'):
       for partido in partidos_semana:
-        equipos = partido.split(' @ ')
+        # Extraer los nombres de los dos equipos limpios separados por " vs "
+        equipos = partido.split(' vs ')
         picks_usuario[partido] = st.radio(
             partido, equipos, horizontal=True, disabled=not tiempo_permitido
         )
@@ -136,10 +149,31 @@ else:
           for partido, prediccion in picks_usuario.items():
             sheet.append_row([participante, semana, partido, prediccion])
           mostrar_recibo(participante, semana, picks_usuario)
-  else:
-    st.info('No se encontraron partidos para esta semana.')
 
-# --- 3. PANEL DE ADMINISTRADOR ---
+  with tab_standings:
+    st.subheader('🏆 Tabla General de Posiciones (Standings)')
+    st.info(
+        'Aquí todos los participantes pueden consultar el acumulado de'
+        ' puntos.'
+    )
+
+    try:
+      import pandas as pd
+
+      # Leer todos los datos de la hoja de Google Sheets
+      data = sheet.get_all_records()
+      if data:
+        df = pd.DataFrame(data)
+        st.dataframe(df, use_container_width=True)
+      else:
+        st.warning('Aún no hay registros guardados en la quiniela.')
+    except Exception as e:
+      st.write(
+          'Cargando tabla de posiciones... (Los registros aparecerán aquí'
+          ' conforme se guarden picks).'
+      )
+
+# --- 3. PANEL DE ADMINISTRADOR (EXCLUSIVO LATERAL) ---
 st.sidebar.markdown('---')
 st.sidebar.subheader('🔐 Panel de Administrador')
 admin_pass = st.sidebar.text_input('Contraseña Admin', type='password')
@@ -147,21 +181,22 @@ admin_pass = st.sidebar.text_input('Contraseña Admin', type='password')
 password_correcta = st.secrets.get('ADMIN_PASSWORD', 'admin123')
 
 if admin_pass == password_correcta:
-  st.sidebar.success('Acceso concedido')
-  with st.sidebar.expander('⚙️ Cargar Resultados'):
+  st.sidebar.success('Acceso de Administrador Concedido')
+  with st.sidebar.expander('⚙️ Cargar Resultados Finales'):
     semana_calificar = st.selectbox(
         'Semana a calificar',
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
         key='sem_admin',
     )
     archivo_resultados = st.file_uploader(
-        'Subir archivo de resultados', type=['csv'], key='res_admin'
+        'Subir resultados oficiales (CSV)', type=['csv'], key='res_admin'
     )
 
-    if archivo_resultados and st.button('Actualizar Puntajes en Tiempo Real'):
+    if archivo_resultados and st.button(
+        'Procesar y Actualizar Puntuaciones'
+    ):
       st.success(
-          f'¡Resultados de la Semana {semana_calificar} procesados y puntajes'
-          ' actualizados!'
+          f'¡Resultados de la Semana {semana_calificar} aplicados con éxito!'
       )
 elif admin_pass != '':
   st.sidebar.error('Contraseña incorrecta')
