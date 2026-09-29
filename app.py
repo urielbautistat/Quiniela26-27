@@ -238,6 +238,9 @@ if admin_pass == password_correcta:
                 df_nuevos_res = pd.read_csv(archivo_resultados, sep=None, engine='python')
                 df_nuevos_res.columns = df_nuevos_res.columns.str.strip()
                 
+                # --- SOLUCIÓN: Convertir celdas vacías (NaN) en texto en blanco ---
+                df_nuevos_res = df_nuevos_res.fillna("")
+                
                 # Convertimos la información a una lista masiva
                 valores = df_nuevos_res[['Semana', 'Partido', 'Ganador']].values.tolist()
                 
