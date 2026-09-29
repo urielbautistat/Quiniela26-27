@@ -233,9 +233,20 @@ if admin_pass == password_correcta:
         archivo_resultados = st.file_uploader('Subir resultados oficiales (CSV)', type=['csv'], key='res_admin')
         
         if archivo_resultados and st.button('Actualizar Resultados Oficiales'):
-            df_nuevos_res = pd.read_csv(archivo_resultados)
-            for index, row in df_nuevos_res.iterrows():
-                sheet_resultados.append_row([row['Semana'], row['Partido'], row['Ganador']])
-            st.success('¡Resultados subidos y podio actualizado con éxito!')
+            try:
+                # El sep=None y engine='python' detecta si Excel usó comas o punto y coma
+                df_nuevos_res = pd.read_csv(archivo_resultados, sep=None, engine='python')
+                
+                # Esto limpia cualquier espacio en blanco accidental en los encabezados
+                df_nuevos_res.columns = df_nuevos_res.columns.str.strip()
+                
+                for index, row in df_nuevos_res.iterrows():
+                    sheet_resultados.append_row([row['Semana'], row['Partido'], row['Ganador']])
+                st.success('¡Resultados subidos y podio actualizado con éxito!')
+                
+            except KeyError as e:
+                st.error(f'Error de columnas: No se encontró exactamente la columna {e}. Tus columnas actuales son: {list(df_nuevos_res.columns)}')
+            except Exception as e:
+                st.error(f'Ocurrió un error al procesar el archivo: {e}')
 elif admin_pass != '':
     st.sidebar.error('Contraseña incorrecta')
