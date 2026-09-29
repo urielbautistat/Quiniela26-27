@@ -234,14 +234,16 @@ if admin_pass == password_correcta:
         
         if archivo_resultados and st.button('Actualizar Resultados Oficiales'):
             try:
-                # El sep=None y engine='python' detecta si Excel usó comas o punto y coma
+                # Lee el CSV detectando separadores en automático
                 df_nuevos_res = pd.read_csv(archivo_resultados, sep=None, engine='python')
-                
-                # Esto limpia cualquier espacio en blanco accidental en los encabezados
                 df_nuevos_res.columns = df_nuevos_res.columns.str.strip()
                 
-                for index, row in df_nuevos_res.iterrows():
-                    sheet_resultados.append_row([row['Semana'], row['Partido'], row['Ganador']])
+                # Convertimos la información a una lista masiva
+                valores = df_nuevos_res[['Semana', 'Partido', 'Ganador']].values.tolist()
+                
+                # Subimos TODOS los resultados en 1 sola petición a Google Sheets
+                sheet_resultados.append_rows(valores)
+                
                 st.success('¡Resultados subidos y podio actualizado con éxito!')
                 
             except KeyError as e:
