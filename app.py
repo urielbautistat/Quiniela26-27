@@ -186,7 +186,7 @@ else:
                 mime='text/plain',
             )
 
-    # --- PESTAÑA 2: STANDINGS ---
+# --- PESTAÑA 2: STANDINGS ---
     with tab_standings:
         st.subheader('🏆 Tabla General de Posiciones (Podio)')
         st.info('1 Acierto = 1 Punto. Los standings para las semanas 1, 2 y 3 se actualizarán cuando se suban los resultados finales.')
@@ -200,6 +200,23 @@ else:
                 
                 if data_resultados:
                     df_res = pd.DataFrame(data_resultados)
+                    
+                    # --- LIMPIEZA DE DATOS (ANTIERRORES) ---
+                    # 1. Limpiar nombres de columnas
+                    df_picks.columns = df_picks.columns.str.strip()
+                    df_res.columns = df_res.columns.str.strip()
+                    
+                    # 2. Asegurar que 'Semana' sea un número en ambas tablas
+                    df_picks['Semana'] = pd.to_numeric(df_picks['Semana'], errors='coerce')
+                    df_res['Semana'] = pd.to_numeric(df_res['Semana'], errors='coerce')
+                    
+                    # 3. Quitar espacios fantasma al inicio o final de los textos
+                    df_picks['Partido'] = df_picks['Partido'].astype(str).str.strip()
+                    df_res['Partido'] = df_res['Partido'].astype(str).str.strip()
+                    df_picks['Prediccion'] = df_picks['Prediccion'].astype(str).str.strip()
+                    df_res['Ganador'] = df_res['Ganador'].astype(str).str.strip()
+                    
+                    # CRUCE DE DATOS Y MATEMÁTICAS
                     df_cruce = pd.merge(df_picks, df_res, on=['Semana', 'Partido'], how='left')
                     
                     df_cruce['Puntos'] = (df_cruce['Prediccion'] == df_cruce['Ganador']).astype(int)
@@ -217,7 +234,8 @@ else:
             else:
                 st.warning('Aún no hay registros guardados en la quiniela.')
         except Exception as e:
-            st.write('Cargando tabla de posiciones... (Asegúrate de que las hojas "Picks" y "Resultados" existan en tu Google Sheets).')
+            st.error(f'⚠️ Error interno al calcular los puntos: {e}')
+            st.write('Por favor, entra a tu archivo de Google Sheets y verifica que la **Fila 1** de la pestaña "Resultados" tenga escrito exactamente los títulos: `Semana` | `Partido` | `Ganador`.')
 
 # --- PANEL DE ADMINISTRADOR ---
 st.sidebar.markdown('---')
